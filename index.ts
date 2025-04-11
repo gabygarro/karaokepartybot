@@ -39,6 +39,10 @@ const handler = async () => {
       UPDATE karaokebot.submission SET done = TRUE
       WHERE id = ?
     `, [songId]);
+    const getCurrentSessionsUser = (currentSessionId) => conn.query(`
+      SELECT user_id FROM karaokebot.session_current_user
+      WHERE session_id = ?
+      `, [currentSessionId]);
 
     bot.on('message', async (message: Message) => {
       conn = await dbConnect();
@@ -49,13 +53,15 @@ const handler = async () => {
         `, [fromId, username]);
         await bot.sendMessage(chatId, `
           /fiesta: Unirse a una fiesta con código
-          /help: Ayuda
+/queue: Las siguientes 5 canciones en la cola
+/mynextone: Mi siguiente canción en la cola
+/help: Ayuda
         `);
 
       } else if (text.startsWith('/help')) {
         await bot.sendMessage(chatId, `
           /queue: Las siguientes 5 canciones en la cola
-          /mynextone: Mi siguiente canción en la cola
+/mynextone: Mi siguiente canción en la cola
         `);
 
       } else if (text.startsWith('/fiesta')) {
@@ -81,19 +87,64 @@ const handler = async () => {
         `, [fromId, partyId]);
         await bot.sendMessage(chatId, 'Fiesta creada');
 
+      } else if (text.startsWith('/queue')) {
+        const [{ id: userId, current_session: currentSessionId }] = await getCurrentUser(chatId);
+        const [{ user_id: currentSessionUserId }] = await getCurrentSessionsUser(currentSessionId);
+        const queue_users = await conn.query(`
+          SELECT DISTINCT s.user_id, u.username
+          FROM submission s
+          JOIN user u ON s.user_id = u.id
+          WHERE s.session_id = ?
+            AND s.done = FALSE;
+        `, [currentSessionId]);
+        let currentUserIndex = queue_users.findIndex((element) =>
+          element.user_id === currentSessionUserId);
+        let reply = '';
+        const queueLength = 10;
+        let ignoreSongIds = [];
+        let i = 0;
+        while (i < queueLength) {
+          const nextIndex = (currentUserIndex === queue_users.length - 1)
+            ? 0
+            : currentUserIndex + 1;
+          const nextUserId = queue_users[nextIndex].user_id;
+          const [song] = await conn.query(`
+            SELECT id, link FROM karaokebot.submission
+            WHERE done = FALSE AND user_id = ? ${ignoreSongIds.length > 0 ? 'AND id NOT IN (?)' : ''} LIMIT 1
+          `, [nextUserId, ignoreSongIds]);
+          if (!song) {
+            const [remainingSubmission] = await conn.query(`
+              SELECT 1 FROM karaokebot.submission
+              WHERE done = FALSE AND session_id = ? ${ignoreSongIds.length > 0 ? 'AND id NOT IN (?)' : ''} LIMIT 1
+            `, [currentSessionId, ignoreSongIds]);
+            if (!remainingSubmission) break;
+            currentUserIndex = nextIndex;
+            continue;
+          }
+          const { id: songId, link } = song;
+          ignoreSongIds = [...ignoreSongIds, songId];
+          const username = queue_users[nextIndex].username;
+          reply = reply + `
+${username}: ${link}`;
+          currentUserIndex = nextIndex;
+          i++;
+        }
+        if (reply === '') {
+          await bot.sendMessage(chatId, `No hay más canciones en la fila`);
+        } else {
+          await bot.sendMessage(chatId, reply);
+        }
+
       } else if (text.startsWith('/next')) {
-        const [{ id: userId, current_session }] = await getCurrentUser(chatId);
-        if (!current_session) return;
+        const [{ id: userId, current_session: currentSessionId }] = await getCurrentUser(chatId);
+        if (!currentSessionId) return;
         const [{ admin_id }] = await conn.query(`
           SELECT admin_id FROM karaokebot.session
           WHERE id = ?
-        `, [current_session]);
+        `, [currentSessionId]);
         if (admin_id != userId) return;
 
-        const [currentSessionUser] = await conn.query(`
-          SELECT user_id FROM karaokebot.session_current_user
-          WHERE session_id = ?
-          `, [current_session]);
+        const [currentSessionUser] = await getCurrentSessionsUser(currentSessionId);
         if (!currentSessionUser) {
           const [{ user_id }] = await conn.query(`
             SELECT user_id FROM karaokebot.submission WHERE done = FALSE LIMIT 1
@@ -101,7 +152,7 @@ const handler = async () => {
           await conn.query(`
             INSERT INTO karaokebot.session_current_user (session_id, user_id)
             VALUES (?, ?)
-          `, [current_session, user_id]);
+          `, [currentSessionId, user_id]);
           await bot.sendMessage(chatId, 'Primer usuario en cola configurado');
           const [{ id: songId, link }] = await getUserSong(user_id);
           const username = await getUsername(user_id);
@@ -114,7 +165,7 @@ const handler = async () => {
           const queue_users = await conn.query(`
             SELECT DISTINCT user_id FROM karaokebot.submission
             WHERE session_id = ? AND done = FALSE;
-          `, [current_session]);
+          `, [currentSessionId]);
           const currentUserIndex = queue_users.findIndex((element) =>
             element.user_id === currentSessionUser.user_id);
           const nextIndex = (currentUserIndex === queue_users.length - 1)
@@ -132,14 +183,14 @@ const handler = async () => {
           await conn.query(`
             UPDATE karaokebot.session_current_user SET user_id = ?
             WHERE session_id = ?
-          `, [nextUserId, current_session]);
+          `, [nextUserId, currentSessionId]);
         }
 
       } else {
-        const [{ id: userId, current_session }] = await getCurrentUser(chatId);
+        const [{ id: userId, current_session: currentSessionId }] = await getCurrentUser(chatId);
         const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|embed\/|live\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})(\S*)?$/;
 
-        if (!current_session) {
+        if (!currentSessionId) {
           const partyId = text.toUpperCase();
           const [session] = await conn.query(`
             SELECT id FROM karaokebot.session
@@ -160,7 +211,7 @@ const handler = async () => {
           await conn.query(`
             INSERT INTO karaokebot.submission (link, session_id, telegram_chat_id, user_id)
             VALUES (?, ?, ?, ?)
-          `, [text, current_session, chatId, userId]);
+          `, [text, currentSessionId, chatId, userId]);
           await bot.sendMessage(chatId, 'Vídeo añadido a la cola');
           const username = await getUsername(userId);
           console.log(`Usuario: ${username} Link: ${text}`);
