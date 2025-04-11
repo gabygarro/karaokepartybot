@@ -1,0 +1,25 @@
+services:
+  # bot:
+  #   build: .
+  #   container_name: bot
+  #   restart: always
+  #   profiles:
+  #     - donotstart
+  #   environment:
+  #     BOT_API_KEY: ${BOT_API_KEY}
+  #     DB_HOST: db
+  #     DB_PWD: ${DB_PWD}
+  #   ports:
+  #     - "3000:3000"
+  #   depends_on:
+  #     - db
+
+  db:
+    image: mariadb:latest
+    container_name: bot-mariadb
+    environment:
+      MYSQL_DATABASE: karaokebot
+      MYSQL_USER: bot
+      MARIADB_ROOT_PASSWORD: ${DB_PWD}
+    ports:
+      - "3306:3306"

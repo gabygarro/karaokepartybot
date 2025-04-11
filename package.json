@@ -1,0 +1,34 @@
+{
+  "name": "karaokepartybot",
+  "version": "1.0.0",
+  "description": "Telegram bot that receives links to karaoke songs and manages a round-robin queue",
+  "type": "module",
+  "scripts": {
+    "start": "tsx watch index.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gabygarro/karaokepartybot.git"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "karaoke"
+  ],
+  "author": "Gaby Garro",
+  "license": "GPL-3.0-or-later",
+  "bugs": {
+    "url": "https://github.com/gabygarro/karaokepartybot/issues"
+  },
+  "homepage": "https://github.com/gabygarro/karaokepartybot#readme",
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "mariadb": "^3.4.1",
+    "node-telegram-bot-api": "^0.66.0"
+  },
+  "devDependencies": {
+    "@types/node-telegram-bot-api": "^0.64.8",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3"
+  }
+}
