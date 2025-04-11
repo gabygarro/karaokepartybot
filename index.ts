@@ -89,6 +89,10 @@ const handler = async () => {
 
       } else if (text.startsWith('/queue')) {
         const [{ id: userId, current_session: currentSessionId }] = await getCurrentUser(chatId);
+        if (!currentSessionId) {
+          await bot.sendMessage(chatId, 'Primero tienes que unirte a una fiesta. Escribe tu código de fiesta:');
+          return;
+        }
         const [{ user_id: currentSessionUserId }] = await getCurrentSessionsUser(currentSessionId);
         const queue_users = await conn.query(`
           SELECT DISTINCT s.user_id, u.username
@@ -176,7 +180,12 @@ ${username}: ${link}`;
           const nextIndex = (currentUserIndex === queue_users.length - 1)
             ? 0
             : currentUserIndex + 1;
-          const nextUserId = queue_users[nextIndex].user_id;
+          const nextUser = queue_users[nextIndex];
+          if (!nextUser) {
+            await bot.sendMessage(chatId, 'No hay más vídeos');
+            return;
+          }
+          const nextUserId = nextUser.user_id;
           const [{ id: songId, link }] = await getUserSong(nextUserId, currentSessionId);
           const username = await getUsername(nextUserId);
           await bot.sendMessage(chatId, `
