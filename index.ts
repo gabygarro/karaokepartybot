@@ -53,8 +53,6 @@ const handler = async () => {
         `, [fromId, username]);
         await bot.sendMessage(chatId, `
           /fiesta: Unirse a una fiesta con código
-/queue: Las siguientes 5 canciones en la cola
-/mynextone: Mi siguiente canción en la cola
 /help: Ayuda
         `);
 
@@ -141,8 +139,12 @@ ${username}: ${link}`;
 
       } else if (text.startsWith('/mynextone')) {
         const [{ id: userId, current_session: currentSessionId }] = await getCurrentUser(chatId);
-        const [{ link }] = await getUserSong(userId, currentSessionId);
-        await bot.sendMessage(chatId, link);
+        const [song] = await getUserSong(userId, currentSessionId);
+        if (!song) {
+          await bot.sendMessage(chatId, 'No tienes vídeos en la cola');
+          return;
+        }
+        await bot.sendMessage(chatId, song.link);
 
       } else if (text.startsWith('/next')) {
         const [{ id: userId, current_session: currentSessionId }] = await getCurrentUser(chatId);
@@ -219,7 +221,12 @@ ${username}: ${link}`;
             UPDATE karaokebot.user SET current_session = ?
             WHERE id = ?
           `, [sessionId, userId]);
-          await bot.sendMessage(chatId, 'Ahora me puedes enviar enlaces a vídeos de Youtube (uno por mensaje)');
+          await bot.sendMessage(chatId, `
+            Ahora me puedes enviar enlaces a vídeos de Youtube (uno por mensaje)
+También puedes intentar los siguientes comandos:
+/queue: Las siguientes 5 canciones en la cola
+/mynextone: Mi siguiente canción en la cola
+          `);
 
         } else if (youtubeRegex.test(text)) {
           await conn.query(`
