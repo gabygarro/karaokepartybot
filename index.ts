@@ -31,10 +31,10 @@ const handler = async () => {
       `, [userId]);
       return telegram_user_id;
     }
-    const getUserSong = (userId) => conn.query(`
+    const getUserSong = (userId, sessionId) => conn.query(`
       SELECT id, link FROM karaokebot.submission
-      WHERE done = FALSE AND user_id = ? LIMIT 1
-    `, [userId]);
+      WHERE done = FALSE AND user_id = ? AND session_id = ? LIMIT 1
+    `, [userId, sessionId]);
     const setSongAsDone = (songId) => conn.query(`
       UPDATE karaokebot.submission SET done = TRUE
       WHERE id = ?
@@ -110,8 +110,8 @@ const handler = async () => {
           const nextUserId = queue_users[nextIndex].user_id;
           const [song] = await conn.query(`
             SELECT id, link FROM karaokebot.submission
-            WHERE done = FALSE AND user_id = ? ${ignoreSongIds.length > 0 ? 'AND id NOT IN (?)' : ''} LIMIT 1
-          `, [nextUserId, ignoreSongIds]);
+            WHERE done = FALSE AND user_id = ? AND session_id = ? ${ignoreSongIds.length > 0 ? 'AND id NOT IN (?)' : ''} LIMIT 1
+          `, [nextUserId, currentSessionId, ignoreSongIds]);
           if (!song) {
             const [remainingSubmission] = await conn.query(`
               SELECT 1 FROM karaokebot.submission
@@ -135,6 +135,11 @@ ${username}: ${link}`;
           await bot.sendMessage(chatId, reply);
         }
 
+      } else if (text.startsWith('/mynextone')) {
+        const [{ id: userId, current_session: currentSessionId }] = await getCurrentUser(chatId);
+        const [{ link }] = await getUserSong(userId, currentSessionId);
+        await bot.sendMessage(chatId, link);
+
       } else if (text.startsWith('/next')) {
         const [{ id: userId, current_session: currentSessionId }] = await getCurrentUser(chatId);
         if (!currentSessionId) return;
@@ -154,7 +159,7 @@ ${username}: ${link}`;
             VALUES (?, ?)
           `, [currentSessionId, user_id]);
           await bot.sendMessage(chatId, 'Primer usuario en cola configurado');
-          const [{ id: songId, link }] = await getUserSong(user_id);
+          const [{ id: songId, link }] = await getUserSong(user_id, currentSessionId);
           const username = await getUsername(user_id);
           await bot.sendMessage(chatId, `
             Usuario: ${username} Link: ${link}
@@ -172,7 +177,7 @@ ${username}: ${link}`;
             ? 0
             : currentUserIndex + 1;
           const nextUserId = queue_users[nextIndex].user_id;
-          const [{ id: songId, link }] = await getUserSong(nextUserId);
+          const [{ id: songId, link }] = await getUserSong(nextUserId, currentSessionId);
           const username = await getUsername(nextUserId);
           await bot.sendMessage(chatId, `
             Usuario: ${username} Link: ${link}
